@@ -1,7 +1,11 @@
 const fields = [
   "fullName",
   "email",
+  "phone",
   "college",
+  "linkedin",
+  "github",
+  "leetcode",
   "summary",
   "skills",
   "experience"

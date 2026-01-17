@@ -23,6 +23,21 @@ function detectFieldType(input) {
     return "email";
   }
 
+  if (input.type === "tel" || context.includes("phone") || context.includes("mobile")) {
+    return "phone";
+  }
+
+  if (
+    context.includes("linkedin") ||
+    context.includes("github") ||
+    context.includes("leetcode") ||
+    context.includes("website") ||
+    context.includes("url") ||
+    context.includes("link")
+  ) {
+    return "social";
+  }
+
   if (context.includes("name")) {
     return "name";
   }
@@ -39,27 +54,72 @@ function detectFieldType(input) {
   return "text";
 }
 
+/* ================== NAME PARSING (FINAL LOGIC) ================== */
+function parseFullName(fullName) {
+  if (!fullName) return {};
+
+  const parts = fullName.trim().split(/\s+/);
+
+  return {
+    fullName,
+    firstName: parts[0] || "",
+    lastName: parts.length > 1 ? parts[parts.length - 1] : ""
+  };
+}
+
+/* ================== NAME SUBTYPE DETECTION ================== */
+function detectNameSubtype(input) {
+  const context = getFieldContext(input);
+
+  if (context.includes("first")) return "firstName";
+  if (context.includes("last")) return "lastName";
+  if (context.includes("full")) return "fullName";
+
+  // Generic "Name"
+  return "fullName";
+}
+
 /* ================== FIELD → PROFILE KEYS ================== */
 const FIELD_TYPE_TO_KEYS = {
   email: ["email"],
-  name: ["fullName"],        // name intelligence comes later
+  phone: ["phone"],
+  social: ["linkedin", "github", "leetcode"],
+  name: ["firstName", "lastName", "fullName"],
   longText: ["summary", "experience"],
   text: ["college"]
 };
 
 /* ================== LABELS ================== */
 const KEY_LABELS = {
+  firstName: "First Name",
+  lastName: "Last Name",
   fullName: "Full Name",
   email: "Email",
+  phone: "Phone",
+  linkedin: "LinkedIn",
+  github: "GitHub",
+  leetcode: "LeetCode",
   college: "College",
   summary: "Summary",
   experience: "Experience"
 };
 
-/* ================== GET ALLOWED KEYS ================== */
+/* ================== SMART KEY FILTERING ================== */
 function getAllowedKeysForField(input) {
   const fieldType = detectFieldType(input);
-  return FIELD_TYPE_TO_KEYS[fieldType] || [];
+
+  if (fieldType !== "name") {
+    return FIELD_TYPE_TO_KEYS[fieldType] || [];
+  }
+
+  // Name-specific filtering
+  const subtype = detectNameSubtype(input);
+
+  if (subtype === "firstName") return ["firstName"];
+  if (subtype === "lastName") return ["lastName"];
+  if (subtype === "fullName") return ["fullName"];
+
+  return ["fullName"];
 }
 
 /* ================== FOCUS DETECTION ================== */
@@ -69,8 +129,6 @@ document.addEventListener("focusin", (event) => {
   if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA") return;
 
   activeField = target;
-
-  console.log("🎯 Focused field type:", detectFieldType(target));
   showFloatingBox(target);
 });
 
@@ -102,7 +160,7 @@ function setNativeValue(element, value) {
   element.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-/* ================== FLOATING BOX ================== */
+/* ================== FLOATING BOX UI ================== */
 function showFloatingBox(field) {
   if (floatingBox) {
     floatingBox.remove();
@@ -110,7 +168,6 @@ function showFloatingBox(field) {
   }
 
   const allowedKeys = getAllowedKeysForField(field);
-
   if (!allowedKeys.length) return;
 
   floatingBox = document.createElement("div");
@@ -164,17 +221,36 @@ function showFloatingBox(field) {
   floatingBox.style.left = rect.left + "px";
 }
 
-/* ================== AUTOFILL ================== */
+/* ================== AUTOFILL LOGIC ================== */
 function autofillField(key) {
   if (!activeField) return;
 
   chrome.storage.local.get(["profile"], (res) => {
-    if (!res.profile || !res.profile[key]) {
-      alert(`No data saved for ${KEY_LABELS[key]}`);
+    if (!res.profile) {
+      alert("No profile data saved");
       return;
     }
 
-    setNativeValue(activeField, res.profile[key]);
+    // Name handling
+    if (["firstName", "lastName", "fullName"].includes(key)) {
+      const nameData = parseFullName(res.profile.fullName);
+
+      if (!nameData[key]) {
+        alert(`No data available for ${KEY_LABELS[key]}`);
+        return;
+      }
+
+      setNativeValue(activeField, nameData[key]);
+    } else {
+      // Normal fields
+      if (!res.profile[key]) {
+        alert(`No data saved for ${KEY_LABELS[key]}`);
+        return;
+      }
+
+      setNativeValue(activeField, res.profile[key]);
+    }
+
     console.log(`✅ ApplyFast autofilled: ${key}`);
 
     floatingBox.remove();
