@@ -1,4 +1,7 @@
 const fields = [
+  "fullName",
+  "email",
+  "college",
   "summary",
   "skills",
   "experience"
